@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+script_path=$(readlink -f -- "$0")
+app_dir=${script_path%/*}
+exec /usr/bin/python3 "$app_dir/remindme.py" "$@"
