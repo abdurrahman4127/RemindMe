@@ -60,7 +60,7 @@ point there:
 
 ```sh
 mkdir -p "$HOME/.local/bin"
-ln -sfn "$HOME/RemindMe/remindme" "$HOME/.local/bin/remindme"
+ln -sfn "$HOME/scritps/RemindMe/remindme" "$HOME/.local/bin/remindme"
 ```
 
 Ensure `~/.local/bin` is on `PATH`. For Bash, add this to `~/.bashrc` if it is
@@ -73,7 +73,7 @@ export PATH="$HOME/.local/bin:$PATH"
 The `remind` command is retained as a compatibility alias. To recreate it:
 
 ```sh
-ln -sfn "$HOME/RemindMe/remindme" "$HOME/.local/bin/remind"
+ln -sfn "$HOME/scritps/RemindMe/remindme" "$HOME/.local/bin/remind"
 ```
 
 ## Use
@@ -142,12 +142,12 @@ Other useful settings in `remindme.py`:
 Set `XDG_DATA_HOME` to move the default database location, or pass
 `--database PATH` when running the command.
 
-If you install the project somewhere other than `~/RemindMe`, update
+If you install the project somewhere other than `~/scritps/RemindMe`, update
 `ExecStart` in `remindme.service`, then relink/restart the user service:
 
 ```sh
 systemctl --user disable --now remindme.service
-systemctl --user link "$HOME/RemindMe/remindme.service"
+systemctl --user link "$HOME/scritps/RemindMe/remindme.service"
 systemctl --user daemon-reload
 systemctl --user enable --now remindme.service
 ```
@@ -163,7 +163,7 @@ into the graphical session.
 Enable the service for this checkout:
 
 ```sh
-systemctl --user link "$HOME/RemindMe/remindme.service"
+systemctl --user link "$HOME/scritps/RemindMe/remindme.service"
 systemctl --user daemon-reload
 systemctl --user enable --now remindme.service
 ```
@@ -218,12 +218,12 @@ The tests use temporary databases and do not send real desktop notifications.
 ## Troubleshooting
 
 - **`remindme: command not found`:** confirm `~/.local/bin` is on `PATH` and
-  the link targets `~/RemindMe/remindme`.
+  the link targets `~/scritps/RemindMe/remindme`.
 - **No notification while the laptop was off/asleep:** alerts cannot run while
   the machine is unavailable. After login, check `systemctl --user status
   remindme.service`; pending due reminders are checked at service startup.
 - **Service cannot start:** inspect `journalctl --user -u remindme.service`.
-  The unit expects this repository at `~/RemindMe`.
+  The unit expects this repository at `~/scritps/RemindMe`.
 - **No desktop alert:** check that `notify-send` is available and that the
   graphical session has a notification daemon. Failed notifications remain
   retryable and are logged by the service.
