@@ -4,7 +4,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 %h/RemindMe/remindme.py --daemon
+ExecStart=/usr/bin/python3 %h/scritps/RemindMe/remindme.py --daemon
 Restart=on-failure
 RestartSec=5
 
