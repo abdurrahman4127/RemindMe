@@ -9,13 +9,25 @@ from remindme import (
     NOTIFICATION_TIMEOUT_MS,
     Reminder,
     ReminderStore,
+    QuitRequested,
+    THEMES,
+    command_palette,
+    color_attr,
     edit_buffer,
+    draw,
+    draw_key_hints,
+    draw_palette_key_hints,
+    filter_palette_options,
     load_banner,
+    load_theme,
     main,
     notify_due,
     parse_due,
     parse_reminder_request,
+    run_tui,
+    save_theme,
     send_desktop_notification,
+    theme_palette_options,
 )
 
 
@@ -25,6 +37,34 @@ class ParseDueTests(unittest.TestCase):
 
     def test_parses_relative_minutes(self):
         self.assertEqual(parse_due("in 20m", self.now), self.now + timedelta(minutes=20))
+
+    def test_parses_combined_duration_components(self):
+        self.assertEqual(
+            parse_due("1d 3h", self.now),
+            self.now + timedelta(hours=27),
+        )
+        self.assertEqual(
+            parse_due("3d 47m", self.now),
+            self.now + timedelta(minutes=3 * 24 * 60 + 47),
+        )
+        self.assertEqual(
+            parse_due("in 1d 3h", self.now),
+            self.now + timedelta(hours=27),
+        )
+
+    def test_rejects_repeated_duration_unit(self):
+        with self.assertRaisesRegex(ValueError, "each duration unit only once"):
+            parse_due("1d 2d", self.now)
+
+    def test_parses_today_and_tomorrow_with_am_pm(self):
+        self.assertEqual(
+            parse_due("tomorrow 9:15 AM", self.now),
+            datetime(2026, 11, 2, 9, 15, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            parse_due("today 1:23 PM", self.now),
+            datetime(2026, 11, 1, 13, 23, tzinfo=timezone.utc),
+        )
 
     def test_parses_tomorrow_local_time(self):
         self.assertEqual(
@@ -61,6 +101,14 @@ class ParseDueTests(unittest.TestCase):
         )
         self.assertEqual(title, "Take medicine")
         self.assertEqual(due_at, self.now + timedelta(minutes=20))
+
+    def test_parses_combined_duration_with_title(self):
+        title, due_at = parse_reminder_request(
+            ["1d", "3h", "Call", "Sam"],
+            self.now,
+        )
+        self.assertEqual(title, "Call Sam")
+        self.assertEqual(due_at, self.now + timedelta(hours=27))
 
     def test_cli_arguments_create_reminder_without_opening_tui(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -111,6 +159,250 @@ class BannerTests(unittest.TestCase):
                 load_banner(path)
 
 
+class CommandPaletteTests(unittest.TestCase):
+    def test_theme_choices_only_appear_in_the_theme_picker(self):
+        suggestions = filter_palette_options("theme")
+
+        commands = [option.command for option in suggestions]
+        self.assertEqual(commands, ["theme"])
+        self.assertIn("forest", [option.command for option in theme_palette_options()])
+
+    def test_palette_searches_command_descriptions(self):
+        suggestions = filter_palette_options("10 minutes")
+
+        self.assertTrue(any(option.command == "snooze" for option in suggestions))
+
+    def test_palette_accepts_slash_prefixed_query(self):
+        suggestions = filter_palette_options("/theme")
+
+        self.assertEqual([option.command for option in suggestions], ["theme"])
+
+    def test_theme_selection_is_saved_and_loaded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+
+            save_theme("ocean", config_path)
+
+            self.assertEqual(load_theme(config_path), "ocean")
+
+    def test_unknown_theme_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+
+            with self.assertRaisesRegex(ValueError, "Unknown RemindMe theme"):
+                save_theme("ultraviolet", config_path)
+
+    def test_default_theme_preserves_original_plain_style(self):
+        with patch("remindme.ACTIVE_THEME", "default"):
+            self.assertEqual(color_attr("selected"), curses.A_REVERSE)
+            self.assertEqual(color_attr("header", curses.A_BOLD), curses.A_BOLD)
+
+    def test_large_theme_collection_is_available(self):
+        self.assertGreaterEqual(len(THEMES), 20)
+        self.assertIsNone(THEMES["default"])
+        self.assertIn("copilot", THEMES)
+        self.assertIn("github-dark", THEMES)
+
+    def test_palette_is_bottom_docked_and_runs_typed_command(self):
+        class FakeWindow:
+            def __init__(self, keys):
+                self.keys = iter(keys)
+                self.writes = []
+                self.moves = []
+                self.events = []
+
+            def keypad(self, _enabled):
+                pass
+
+            def erase(self):
+                self.events.append("panel_erase")
+
+            def addnstr(self, *args):
+                self.writes.append(args)
+
+            def attrset(self, _attribute):
+                pass
+
+            def move(self, *args):
+                self.moves.append(args)
+
+            def refresh(self):
+                self.events.append("panel_refresh")
+
+            def get_wch(self):
+                return next(self.keys)
+
+        class FakeScreen:
+            def __init__(self):
+                self.events = []
+
+            def getmaxyx(self):
+                return 24, 80
+
+            def touchwin(self):
+                self.events.append("screen_touch")
+
+            def refresh(self):
+                self.events.append("screen_refresh")
+
+        keys = [*("oce"), "\t", "\n"]
+        panel = FakeWindow(keys)
+        screen = FakeScreen()
+        with (
+            patch("remindme.curses.newwin", return_value=panel) as newwin,
+            patch("remindme.curses.curs_set"),
+            patch("remindme.ACTIVE_THEME", "default"),
+        ):
+            command = command_palette(
+                screen,
+                "default",
+                theme_palette_options(),
+                "Choose Theme",
+            )
+
+        self.assertEqual(command, "ocean")
+        self.assertEqual(newwin.call_args.args, (13, 80, 11, 0))
+        self.assertIn((10, 1 + len("› /ocean")), panel.moves)
+        self.assertTrue(any("› /ocean" in write[2] for write in panel.writes))
+        self.assertEqual(
+            panel.events[-2:],
+            ["panel_erase", "panel_refresh"],
+        )
+        self.assertEqual(screen.events, ["screen_touch", "screen_refresh"])
+
+    def test_theme_palette_previews_highlighted_theme_and_restores_on_cancel(self):
+        class FakeWindow:
+            def __init__(self, keys):
+                self.keys = iter(keys)
+
+            def keypad(self, _enabled):
+                pass
+
+            def erase(self):
+                pass
+
+            def addnstr(self, *args):
+                pass
+
+            def move(self, *args):
+                pass
+
+            def refresh(self):
+                pass
+
+            def get_wch(self):
+                return next(self.keys)
+
+        class FakeScreen:
+            def getmaxyx(self):
+                return 24, 80
+
+            def touchwin(self):
+                pass
+
+            def refresh(self):
+                pass
+
+        previews = []
+        panel = FakeWindow((curses.KEY_DOWN, "\x1b"))
+        with (
+            patch("remindme.curses.newwin", return_value=panel),
+            patch("remindme.curses.curs_set"),
+            patch("remindme.curses.has_colors", return_value=False),
+            patch("remindme.ACTIVE_THEME", "ocean"),
+        ):
+            result = command_palette(
+                FakeScreen(),
+                "ocean",
+                theme_palette_options(),
+                "Choose Theme",
+                previews.append,
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(previews, ["ocean", "forest", None])
+
+    def test_palette_hints_style_keys_without_the_colon(self):
+        class FakeWindow:
+            def __init__(self):
+                self.writes = []
+
+            def addnstr(self, *args):
+                self.writes.append(args)
+
+        window = FakeWindow()
+        draw_palette_key_hints(window, 0, 80)
+
+        tab_key = next(write for write in window.writes if write[2] == "tab")
+        colon_action = next(write for write in window.writes if write[2] == ": complete")
+        self.assertEqual(tab_key[4], curses.A_REVERSE | curses.A_BOLD)
+        self.assertEqual(colon_action[4], curses.A_DIM)
+
+    def test_key_hints_shade_padded_key_only_and_omit_colon(self):
+        class FakeWindow:
+            def __init__(self):
+                self.writes = []
+
+            def addstr(self, *args):
+                self.writes.append(args)
+
+        window = FakeWindow()
+        draw_key_hints(window, 0, 100, "default")
+        chip = next(write for write in window.writes if len(write) == 4 and write[2] == " a ")
+        self.assertEqual(chip[:3], (0, 0, " a "))
+        self.assertEqual(chip[3], curses.A_REVERSE | curses.A_BOLD)
+        self.assertIn((0, 3, " add", curses.A_NORMAL), window.writes)
+        self.assertNotIn((0, 3, ": add", curses.A_NORMAL), window.writes)
+
+    def test_reminder_list_shows_due_time_with_am_pm(self):
+        class FakeWindow:
+            def __init__(self):
+                self.writes = []
+
+            def erase(self):
+                pass
+
+            def getmaxyx(self):
+                return 24, 100
+
+            def addnstr(self, *args):
+                self.writes.append(args)
+
+            def addstr(self, *args):
+                self.writes.append(args)
+
+            def refresh(self):
+                pass
+
+        due_at = (datetime.now().astimezone() + timedelta(days=1)).replace(
+            hour=19,
+            minute=43,
+            second=0,
+            microsecond=0,
+        )
+        window = FakeWindow()
+        draw(
+            window,
+            [Reminder(1, "Review paper", due_at, False, False)],
+            0,
+            "",
+            Path("/tmp/reminders.sqlite3"),
+            (),
+            "default",
+        )
+
+        expected = due_at.strftime("%a %d %b %I:%M %p")
+        self.assertTrue(any(expected in write[2] for write in window.writes))
+
+    def test_invalid_theme_config_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text("[]", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "expected a JSON object"):
+                load_theme(config_path)
+
+
 class InputEditingTests(unittest.TestCase):
     def test_left_arrow_moves_cursor_without_deleting_text(self):
         text, cursor, submitted = edit_buffer("reminder", 8, curses.KEY_LEFT)
@@ -135,6 +427,70 @@ class InputEditingTests(unittest.TestCase):
         self.assertEqual(cursor, 3)
         self.assertFalse(submitted)
 
+
+class TuiQuitTests(unittest.TestCase):
+    def test_escape_and_q_do_not_quit_but_ctrl_q_does(self):
+        class FakeScreen:
+            def __init__(self):
+                self.keys = iter((27, ord("q"), 27, 17))
+                self.read_count = 0
+
+            def keypad(self, _enabled):
+                pass
+
+            def getch(self):
+                self.read_count += 1
+                return next(self.keys)
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = ReminderStore(Path(directory) / "reminders.db")
+            self.addCleanup(store.close)
+            screen = FakeScreen()
+            with (
+                patch("remindme.load_banner", return_value=()),
+                patch("remindme.load_theme", return_value="default"),
+                patch("remindme.apply_theme"),
+                patch("remindme.curses.curs_set"),
+                patch("remindme.draw"),
+            ):
+                run_tui(screen, store)
+
+        self.assertEqual(screen.read_count, 4)
+
+    def test_ctrl_q_quits(self):
+        class FakeScreen:
+            def __init__(self):
+                self.read_count = 0
+
+            def keypad(self, _enabled):
+                pass
+
+            def getch(self):
+                self.read_count += 1
+                return 17
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = ReminderStore(Path(directory) / "reminders.db")
+            self.addCleanup(store.close)
+            screen = FakeScreen()
+            with (
+                patch("remindme.load_banner", return_value=()),
+                patch("remindme.load_theme", return_value="default"),
+                patch("remindme.apply_theme"),
+                patch("remindme.curses.curs_set"),
+                patch("remindme.draw"),
+            ):
+                run_tui(screen, store)
+
+        self.assertEqual(screen.read_count, 1)
+
+    def test_main_handles_ctrl_q_from_modal_input_as_clean_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "reminders.db"
+            with patch("remindme.curses.wrapper", side_effect=QuitRequested):
+                result = main(["--database", str(database)])
+
+        self.assertEqual(result, 0)
 
 class NotificationTests(unittest.TestCase):
     def setUp(self):
