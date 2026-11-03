@@ -86,27 +86,48 @@ the TUI:
 ```sh
 remindme in 20m Take medicine
 remindme in 2h
+remindme 1d 3h Call Sam
+remindme 3d 47m Submit report
 remindme 2 Jun, 1:23 PM Call Sam
 remindme on 2 June at 1:23 PM Call Sam
-remindme tomorrow 09:00 Water plants
+remindme tomorrow 9:00 AM Water plants
+remindme today 1:23 PM Pick up package
 remindme 2026-11-02 14:30 Submit report
 ```
 
-Relative time accepts minutes (`m`), hours (`h`), or days (`d`). Month/day
-dates without a year resolve to the next future occurrence in the local
-timezone. If no title follows the time, the title is `Reminder`.
+Relative time accepts combined days (`d`), hours (`h`), and minutes (`m`), for
+example `1d 3h` means 27 hours from now and `3d 47m` means 3 days and 47
+minutes from now. You can optionally prefix these with `in`. For clock times,
+use either 24-hour time or 12-hour time with `AM`/`PM`. Month/day dates without
+a year resolve to the next future occurrence in the local timezone. Reminder
+times in the TUI use 12-hour format with an `AM` or `PM` suffix. If no title
+follows the time, the title is `Reminder`.
 
 TUI keys:
 
 | Key | Action |
 | --- | --- |
-| Up/Down or `j`/`k` | Select a reminder |
+| `↑`/`↓` or `j`/`k` | Select a reminder |
 | `a` | Add a reminder interactively |
 | `e` | Edit the selected reminder |
-| Space | Mark done or reopen |
+| `space` | Mark done or reopen |
 | `s` | Snooze for 10 minutes |
 | `d` | Delete after confirmation |
-| `q` or Escape | Quit |
+| `ctrl+q` | Quit |
+| `/` | Open the bottom-docked searchable command palette |
+
+In the bottom command area, type to filter the suggestions shown above it,
+use Up/Down to select, Tab to complete the highlighted suggestion, Enter to
+run a command, and Escape to close it. Escape cancels the active prompt or
+closes the palette; press Ctrl+Q to quit the app. Select `theme` to open the
+theme picker; theme names are kept out of the main command suggestions and
+shown only in that picker. The palette commands are `add`, `edit`, `done`,
+`snooze`, `delete`, `theme`, `help`, and `quit`.
+
+The theme picker starts on the currently active theme. Moving the selection
+previews each theme immediately. Press Enter to save the preview as the new
+theme, or Escape to restore the previous theme. Theme selection is saved
+between runs.
 
 When entering or editing text, Left/Right move the insertion cursor, Home/End
 move to the beginning/end, Backspace deletes before the cursor, and Delete
@@ -114,6 +135,11 @@ deletes after it. Enter submits the field; Escape cancels the current input.
 
 The TUI header includes command examples and the key guide at the bottom of
 the screen.
+
+The bottom key guide puts a shaded background behind each key and the single
+space on either side of it. Action labels are plain text, with no colon
+separator; for example, the guide appears as ` a ` add  ` e ` edit. The
+palette’s own footer similarly highlights only its key labels.
 
 Use `remindme --help` for command-line options. Pass `--database PATH` before
 or after the reminder phrase to use a different SQLite database.
@@ -138,6 +164,18 @@ Other useful settings in `remindme.py`:
 - `SNOOZE_MINUTES`: the TUI snooze duration.
 - `NOTIFICATION_TIMEOUT_MS`: requested desktop-alert duration. The desktop
   notification daemon may override it.
+- Use `/theme` to browse 24 themes, including Copilot, GitHub, Catppuccin,
+  Dracula, Nord, Gruvbox, Tokyo Night, Solarized, and more. The original plain
+  terminal appearance is preserved by the `default` theme.
+  Your choice is saved in
+  `$XDG_CONFIG_HOME/remindme/config.json` (or `~/.config/remindme/config.json`).
+  To add or recolor themes, edit the hex color tuples in `THEMES` in
+  `remindme.py`.
+  Available themes: `default`, `copilot`, `github-dark`, `github-light`,
+  `catppuccin-mocha`, `catppuccin-latte`, `dracula`, `nord`, `gruvbox-dark`,
+  `gruvbox-light`, `tokyo-night`, `one-dark`, `monokai`, `solarized-dark`,
+  `solarized-light`, `rose-pine`, `kanagawa`, `everforest`, `matrix`,
+  `synthwave`, `ocean`, `forest`, `ember`, and `high-contrast`.
 
 Set `XDG_DATA_HOME` to move the default database location, or pass
 `--database PATH` when running the command.
