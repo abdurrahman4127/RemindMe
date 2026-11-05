@@ -80,6 +80,26 @@ class QuitRequested(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class TimeChoice:
+    label: str
+    due_at: datetime | None
+
+
+class TimeClarification(ValueError):
+    def __init__(self, message: str, choices: tuple[TimeChoice, ...]):
+        super().__init__(message)
+        self.question = message
+        self.choices = choices
+
+    def __str__(self) -> str:
+        choices = "; ".join(
+            f"{index}. {choice.label}"
+            for index, choice in enumerate(self.choices, start=1)
+        )
+        return f"{self.question} {choices}"
+
+
 def theme_palette_options() -> tuple[PaletteOption, ...]:
     return tuple(
         PaletteOption(name, f"Switch to the {name} theme")
@@ -399,68 +419,157 @@ def parse_due(value: str, now: datetime | None = None) -> datetime:
         return now + duration
 
     absolute = re.fullmatch(
-        r"(?:on\s+)?(\d{1,2}\s+[a-z]{3,9}),?\s+(?:at\s+)?"
-        r"(\d{1,2}:\d{2}\s*(?:am|pm))",
+        r"(?:on\s+)?(\d{1,2}/\d{1,2}),?\s+"
+        r"(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2})",
         value,
     )
     if absolute:
         day_month, clock = absolute.groups()
-        parsed_date = None
-        for date_format in ("%d %b %Y %I:%M %p", "%d %B %Y %I:%M %p"):
-            try:
-                parsed_date = datetime.strptime(
-                    f"{day_month} 2000 {clock}".upper(), date_format
-                )
-                break
-            except ValueError:
-                continue
-        if parsed_date is None:
-            raise ValueError("Use a date like '2 Jun, 1:23 PM'.")
+        clock_match = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", clock)
+        if clock_match is None:
+            raise ValueError("Use a time like 8pm, 1:30 PM, or 20:30.")
+        hour_text, minute_text, meridiem = clock_match.groups()
+        hour = int(hour_text)
+        minute = int(minute_text or 0)
+        if minute > 59:
+            raise ValueError("Minutes must be between 00 and 59.")
+        if meridiem:
+            if not 1 <= hour <= 12:
+                raise ValueError("12-hour clock hours must be between 1 and 12.")
+            hour = hour % 12 + (12 if meridiem == "pm" else 0)
+        elif hour > 23:
+            raise ValueError("24-hour clock hours must be between 0 and 23.")
+
+        day, month = (int(part) for part in day_month.split("/", maxsplit=1))
+        if not 1 <= month <= 12:
+            raise ValueError("Month must be between 1 and 12 in day/month dates.")
+        if not 1 <= day <= 31:
+            raise ValueError("Day must be between 1 and 31 in day/month dates.")
+
         for year in range(now.year, now.year + 9):
             try:
-                candidate = parsed_date.replace(year=year, tzinfo=now.tzinfo)
+                candidate = datetime(
+                    year,
+                    month,
+                    day,
+                    hour,
+                    minute,
+                    tzinfo=now.tzinfo,
+                )
             except ValueError:
                 continue
             if candidate > now:
                 return candidate
         raise ValueError("Could not find a valid upcoming date.")
 
-    if value.startswith("tomorrow "):
-        time_value = value.removeprefix("tomorrow ").strip()
-        target_date = (now + timedelta(days=1)).date()
-    elif value.startswith("today "):
-        time_value = value.removeprefix("today ").strip()
-        target_date = now.date()
-    else:
-        for date_format in (
-            "%Y-%m-%d %H:%M",
-            "%Y-%m-%d %I:%M %p",
-            "%Y-%m-%d %I:%M%p",
-        ):
-            try:
-                return datetime.strptime(value.upper(), date_format).replace(
-                    tzinfo=now.tzinfo
-                )
-            except ValueError:
-                pass
-        raise ValueError(
-            "Use YYYY-MM-DD HH:MM, today HH:MM, tomorrow HH:MM, or in 20m/2h/1d."
-        )
+    clock = re.fullmatch(
+        r"(?:(today|tomorrow)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
+        value,
+    )
+    if clock:
+        day_word, hour_text, minute_text, meridiem = clock.groups()
+        hour = int(hour_text)
+        minute = int(minute_text or 0)
+        if minute > 59:
+            raise ValueError("Minutes must be between 00 and 59.")
+        if meridiem:
+            if not 1 <= hour <= 12:
+                raise ValueError("12-hour clock hours must be between 1 and 12.")
+            hour = hour % 12 + (12 if meridiem == "pm" else 0)
+        elif minute_text:
+            if hour > 23:
+                raise ValueError("24-hour clock hours must be between 0 and 23.")
+        elif not 1 <= hour <= 12:
+            raise ValueError("A bare hour must be between 1 and 12.")
 
-    for time_format in ("%H:%M", "%I:%M %p", "%I:%M%p"):
-        try:
-            parsed_time = datetime.strptime(time_value.upper(), time_format).time()
-            return datetime.combine(target_date, parsed_time, tzinfo=now.tzinfo)
-        except ValueError:
-            pass
-    raise ValueError("Time must look like HH:MM or 9:30PM.")
+        base_date = (
+            (now + timedelta(days=1)).date()
+            if day_word == "tomorrow"
+            else now.date()
+        )
+        explicit_meridiem = meridiem is not None
+        bare_hour = meridiem is None and minute_text is None
+
+        def candidate(on_date, candidate_hour: int) -> datetime:
+            return datetime.combine(
+                on_date,
+                datetime.min.time().replace(hour=candidate_hour, minute=minute),
+                tzinfo=now.tzinfo,
+            )
+
+        if bare_hour:
+            am_hour = hour % 12
+            pm_hour = am_hour + 12
+            morning = candidate(base_date, am_hour)
+            evening = candidate(base_date, pm_hour)
+            if now < morning:
+                return morning
+            if now < evening:
+                raise TimeClarification(
+                    f"{morning.strftime('%I:%M %p')} has passed. Did you mean "
+                    f"{evening.strftime('%I:%M %p')} today?",
+                    (
+                        TimeChoice(f"Use {evening.strftime('%I:%M %p')} today", evening),
+                        TimeChoice("Enter a different time", None),
+                    ),
+                )
+            tomorrow = base_date + timedelta(days=1)
+            morning = candidate(tomorrow, am_hour)
+            evening = candidate(tomorrow, pm_hour)
+            raise TimeClarification(
+                f"Both {morning.strftime('%I:%M %p')} and "
+                f"{evening.strftime('%I:%M %p')} have passed today. Which "
+                "time do you mean for tomorrow?",
+                (
+                    TimeChoice(f"Use {morning.strftime('%I:%M %p')} tomorrow", morning),
+                    TimeChoice(f"Use {evening.strftime('%I:%M %p')} tomorrow", evening),
+                ),
+            )
+
+        due_at = candidate(base_date, hour)
+        if day_word != "tomorrow" and due_at <= now:
+            today = due_at
+            tomorrow = due_at + timedelta(days=1)
+            if explicit_meridiem:
+                raise TimeClarification(
+                    f"{today.strftime('%I:%M %p')} today has already passed. "
+                    "Keep it today or move it to tomorrow?",
+                    (
+                        TimeChoice(f"Keep {today.strftime('%I:%M %p')} today", today),
+                        TimeChoice(f"Move to {tomorrow.strftime('%I:%M %p')} tomorrow", tomorrow),
+                    ),
+                )
+            raise TimeClarification(
+                "That time today has already passed. Keep it today or move it to tomorrow?",
+                (
+                    TimeChoice(f"Keep {today.strftime('%H:%M')} today", today),
+                    TimeChoice(f"Move to {tomorrow.strftime('%H:%M')} tomorrow", tomorrow),
+                ),
+            )
+        return due_at
+
+    raise ValueError(
+        "Use a time like 8pm, today 8:30 PM, 30/7 1am, "
+        "tomorrow 09:15, or a relative time such as 1d 3h."
+    )
 
 
 def parse_reminder_request(
-    arguments: list[str], now: datetime | None = None
+    arguments: list[str],
+    now: datetime | None = None,
+    clarify: Callable[[TimeClarification], datetime] | None = None,
 ) -> tuple[str, datetime]:
     """Parse a due-time phrase followed by an optional reminder title."""
     request = " ".join(arguments).strip()
+
+    def parse_with_clarification(due_text: str) -> datetime:
+        try:
+            return parse_due(due_text, now)
+        except TimeClarification as error:
+            if clarify is None:
+                raise
+            return clarify(error)
+
     relative = re.match(
         r"^(?:in\s+)?((?:\d+\s*[dhm]\s*)+)",
         request,
@@ -471,31 +580,71 @@ def parse_reminder_request(
         if due_text.lower().startswith("in "):
             due_text = due_text[3:].strip()
         title = request[relative.end() :].strip() or "Reminder"
-        return title, parse_due(due_text, now)
+        return title, parse_with_clarification(due_text)
 
     absolute = re.match(
-        r"^(?:(?:on\s+)?\d{1,2}\s+[a-z]{3,9},?\s+(?:at\s+)?"
-        r"\d{1,2}:\d{2}\s*(?:am|pm))(?:\s+|$)",
+        r"^(?:(?:on\s+)?\d{1,2}/\d{1,2},?\s+"
+        r"(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2}))(?:\s+|$)",
         request,
         re.IGNORECASE,
     )
     if absolute:
         due_text = absolute.group(0)
         title = request[absolute.end() :].strip() or "Reminder"
-        return title, parse_due(due_text, now)
+        return title, parse_with_clarification(due_text)
+
+    clock_prefix = re.match(
+        r"^(?:(?:today|tomorrow)\s+)?\d{1,2}(?::\d{2})?"
+        r"(?:\s*(?:am|pm))?(?=\s|$)",
+        request,
+        re.IGNORECASE,
+    )
+    if clock_prefix:
+        due_text = clock_prefix.group(0).strip()
+        title = request[clock_prefix.end() :].strip() or "Reminder"
+        return title, parse_with_clarification(due_text)
 
     for due_text_length in range(len(request.split()), 0, -1):
         words = request.split()
         due_text = " ".join(words[:due_text_length])
         try:
-            due_at = parse_due(due_text, now)
+            due_at = parse_with_clarification(due_text)
+        except TimeClarification:
+            raise
         except ValueError:
             continue
         title = " ".join(words[due_text_length:]).strip() or "Reminder"
         return title, due_at
     raise ValueError(
-        "Start with a time such as 'in 20m', 'in 2h', or '2 Jun, 1:23 PM'."
+        "Start with a time such as 'in 20m', 'in 2h', or '30/7 1:23 PM'."
     )
+
+
+def clarify_time_cli(clarification: TimeClarification) -> datetime:
+    if not sys.stdin.isatty():
+        raise clarification
+    while True:
+        print(clarification.question)
+        for index, choice in enumerate(clarification.choices, start=1):
+            print(f"  {index}. {choice.label}")
+        answer = input("Choose an option: ").strip()
+        try:
+            choice_index = int(answer) - 1
+        except ValueError:
+            choice_index = -1
+        if not 0 <= choice_index < len(clarification.choices):
+            print(f"Choose a number from 1 to {len(clarification.choices)}.")
+            continue
+        chosen = clarification.choices[choice_index].due_at
+        if chosen is not None:
+            return chosen
+        replacement = input("Enter a different time: ").strip()
+        if not replacement:
+            raise ValueError("Time selection cancelled.")
+        try:
+            return parse_due(replacement)
+        except TimeClarification as error:
+            clarification = error
 
 
 def notify_due(
@@ -623,6 +772,34 @@ def prompt(stdscr: curses.window, label: str, initial: str = "") -> str:
             curses.curs_set(0)
         except curses.error:
             pass
+
+
+def prompt_due(stdscr: curses.window, value: str) -> tuple[datetime | None, str | None]:
+    while True:
+        try:
+            return parse_due(value), None
+        except TimeClarification as clarification:
+            choices = "  ".join(
+                f"{index}) {choice.label}"
+                for index, choice in enumerate(clarification.choices, start=1)
+            )
+            answer = prompt(stdscr, f"{clarification.question} {choices} Choose")
+            if not answer:
+                return None, "Time selection cancelled."
+            try:
+                choice_index = int(answer) - 1
+            except ValueError:
+                choice_index = -1
+            if not 0 <= choice_index < len(clarification.choices):
+                return None, f"Choose a number from 1 to {len(clarification.choices)}."
+            chosen = clarification.choices[choice_index].due_at
+            if chosen is not None:
+                return chosen, None
+            value = prompt(stdscr, "Enter a different time")
+            if not value:
+                return None, "Time selection cancelled."
+        except ValueError as error:
+            return None, str(error)
 
 
 def command_palette(
@@ -990,7 +1167,7 @@ def draw(
         stdscr.addnstr(
             max(0, height - 2),
             0,
-            "CLI: remindme 1d 3h [title]  |  remindme 2 Jun, 1:23 PM [title]",
+            'CLI: remindme 1d 3h "title"  |  remindme 30/7 1:23 PM "title"',
             max(0, width - 1),
             color_attr("muted"),
         )
@@ -1063,25 +1240,27 @@ def run_tui(stdscr: curses.window, store: ReminderStore) -> None:
                 continue
             due_text = prompt(
                 stdscr,
-                "When (tomorrow 9:00 AM, 2 Jun 1:23 PM, or 1d 3h)",
+                "When (8pm, 30/7 1am, or 1d 3h)",
             )
-            try:
-                store.add(title, parse_due(due_text))
+            due_at, error = prompt_due(stdscr, due_text)
+            if due_at is not None:
+                store.add(title, due_at)
                 message = "Reminder added."
-            except ValueError as error:
+            elif error:
                 message = str(error)
         elif key == ord("e") and reminders:
             reminder = reminders[selected]
             title = prompt(stdscr, "Title", reminder.title)
             due_text = prompt(
                 stdscr,
-                "When (tomorrow 9:00 AM, 2 Jun 1:23 PM, or 1d 3h)",
+                "When (8pm, 30/7 1am, or 1d 3h)",
                 reminder.due_at.astimezone().strftime("%Y-%m-%d %I:%M %p"),
             )
-            try:
-                store.update(reminder.id, title, parse_due(due_text))
+            due_at, error = prompt_due(stdscr, due_text)
+            if due_at is not None:
+                store.update(reminder.id, title, due_at)
                 message = "Reminder updated."
-            except ValueError as error:
+            elif error:
                 message = str(error)
         elif key == ord(" ") and reminders:
             reminder = reminders[selected]
@@ -1124,7 +1303,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.daemon:
             run_daemon(store)
         elif args.reminder:
-            title, due_at = parse_reminder_request(args.reminder)
+            title, due_at = parse_reminder_request(
+                args.reminder,
+                clarify=clarify_time_cli,
+            )
             store.add(title, due_at)
             print(f"Added: {title} — {due_at.astimezone().strftime('%a %d %b, %I:%M %p')}")
         else:
