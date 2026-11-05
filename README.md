@@ -88,20 +88,46 @@ remindme in 20m Take medicine
 remindme in 2h
 remindme 1d 3h Call Sam
 remindme 3d 47m Submit report
-remindme 2 Jun, 1:23 PM Call Sam
-remindme on 2 June at 1:23 PM Call Sam
+remindme 8pm "Call Mom"
+remindme 8 pm "Call Mom"
+remindme today 8pm "Call Mom"
+remindme today 8 pm Take medicine
+remindme 8:07pm Check dinner
+remindme tomorrow 12am Check the oven
+remindme tomorrow 12pm Pick up lunch
+remindme tomorrow 20:30 Team meeting
+remindme 30/07 1am "LinkedIn post"
+remindme 30/7 1am "LinkedIn post"
+remindme 2/6, 1:23 PM "Call Sam"
+remindme on 2/6 at 1:23 PM "Call Sam"
 remindme tomorrow 9:00 AM Water plants
 remindme today 1:23 PM Pick up package
-remindme 2026-11-02 14:30 Submit report
 ```
 
 Relative time accepts combined days (`d`), hours (`h`), and minutes (`m`), for
 example `1d 3h` means 27 hours from now and `3d 47m` means 3 days and 47
 minutes from now. You can optionally prefix these with `in`. For clock times,
-use either 24-hour time or 12-hour time with `AM`/`PM`. Month/day dates without
-a year resolve to the next future occurrence in the local timezone. Reminder
-times in the TUI use 12-hour format with an `AM` or `PM` suffix. If no title
-follows the time, the title is `Reminder`.
+use either 24-hour time or 12-hour time with `AM`/`PM`. A date is optional for
+12-hour times: `8pm`, `8 pm`, and `today 8pm` all mean today at 8:00 PM;
+`8:07pm` means 8:07 PM. If minutes are omitted, they default to `00`.
+`12am` is midnight and `12pm` is noon. Calendar dates use day/month without a
+year; both `30/07` and `30/7` are valid. A date can be followed by a time such
+as `30/7 1am` or `2/6, 1:23 PM`; it resolves to the next future occurrence in
+the local timezone. Reminder times in the TUI use 12-hour format with an
+`AM` or `PM` suffix. Existing 24-hour clock inputs such as `20:00` remain
+supported, including with a day/month date. Calendar dates do not accept a
+year. If no title follows the time, the title is `Reminder`.
+
+A bare hour such as `8` is interpreted using the current local time. For
+example, before 8:00 AM it means 8:00 AM today. After 8:00 AM, RemindMe asks
+you to confirm 8:00 PM today or enter a different time. If both occurrences
+have passed, it asks whether you meant 8:00 AM or 8:00 PM tomorrow. If an
+explicitly specified today time has already passed (for example, `today 8pm`
+after 8:00 PM), RemindMe asks whether to keep it today or move it to tomorrow.
+
+Reminder names can be quoted to preserve spaces. For example,
+`remindme 8pm "Call Mom"` creates a reminder titled `Call Mom`; quoted titles
+also work with day/month dates, as in `remindme 30/07 1am "LinkedIn post"`.
 
 TUI keys:
 
