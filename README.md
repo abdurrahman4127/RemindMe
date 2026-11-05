@@ -9,9 +9,9 @@ storage, and optional desktop notifications.
 
 ## Preview
 
-Here is an example of the app running in a terminal:
+Screenshot of the running terminal UI:
 
-![RemindMe terminal UI demo](assets/demo.png)
+![RemindMe reminder list](assets/figs/reminders.png)
 
 ### ASCII banner
 
@@ -40,7 +40,7 @@ you can change the art without editing the Python code:
 | `remindme.service` | systemd user unit for background desktop notifications. |
 | `test_remindme.py` | Automated tests for date parsing and notification behavior. |
 | `assets/banner.txt` | Editable UTF-8 ASCII/Unicode art displayed in the TUI header. |
-| `assets/demo.png` | Screenshot example of the RemindMe terminal UI. |
+| `assets/figs/reminders.png` | Screenshot example of the RemindMe terminal UI. |
 | `.gitignore` | Keeps Python bytecode and local database artifacts out of Git. |
 
 ## Requirements
@@ -84,24 +84,26 @@ Run it with a due-time phrase to create a reminder directly without opening
 the TUI:
 
 ```sh
-remindme in 20m Take medicine
-remindme in 2h
-remindme 1d 3h Call Sam
-remindme 3d 47m Submit report
-remindme 8pm "Call Mom"
-remindme 8 pm "Call Mom"
-remindme today 8pm "Call Mom"
-remindme today 8 pm Take medicine
-remindme 8:07pm Check dinner
-remindme tomorrow 12am Check the oven
-remindme tomorrow 12pm Pick up lunch
-remindme tomorrow 20:30 Team meeting
-remindme 30/07 1am "LinkedIn post"
-remindme 30/7 1am "LinkedIn post"
-remindme 2/6, 1:23 PM "Call Sam"
-remindme on 2/6 at 1:23 PM "Call Sam"
-remindme tomorrow 9:00 AM Water plants
-remindme today 1:23 PM Pick up package
+remindme in 20m "Email the journal editor"
+remindme in 2h "Send an update to the research group"
+remindme 1d 3h "Review the literature review"
+remindme 3d 47m "Submit the revised manuscript"
+remindme 8pm "Email the coauthor"
+remindme 8 pm "Review the paper"
+remindme today 8pm "Send the project update"
+remindme today 8 pm "Review the paper"
+remindme 8:07pm "Check the submission portal"
+remindme tomorrow 12am "Submit the conference abstract"
+remindme tomorrow 12pm "Meet with the research group"
+remindme tomorrow 20:30 "Prepare conference slides"
+remindme 30/07 1am "Submit the grant application"
+remindme 30/7 1am "Proofread the revised manuscript"
+remindme 25 nov, 1am "Prepare the LinkedIn post"
+remindme 16 dec, 11am "Prepare the LinkedIn post"
+remindme 2/6, 1:23 PM "Email the journal editor"
+remindme on 2/6 at 1:23 PM "Meet with the research group"
+remindme tomorrow 9:00 AM "Finish the peer review"
+remindme today 1:23 PM "Send the revision update"
 ```
 
 Relative time accepts combined days (`d`), hours (`h`), and minutes (`m`), for
@@ -111,12 +113,13 @@ use either 24-hour time or 12-hour time with `AM`/`PM`. A date is optional for
 12-hour times: `8pm`, `8 pm`, and `today 8pm` all mean today at 8:00 PM;
 `8:07pm` means 8:07 PM. If minutes are omitted, they default to `00`.
 `12am` is midnight and `12pm` is noon. Calendar dates use day/month without a
-year; both `30/07` and `30/7` are valid. A date can be followed by a time such
-as `30/7 1am` or `2/6, 1:23 PM`; it resolves to the next future occurrence in
-the local timezone. Reminder times in the TUI use 12-hour format with an
-`AM` or `PM` suffix. Existing 24-hour clock inputs such as `20:00` remain
-supported, including with a day/month date. Calendar dates do not accept a
-year. If no title follows the time, the title is `Reminder`.
+year; both `30/07` and `30/7` are valid. English month names and abbreviations
+are also accepted, as in `25 nov, 1am` or `25 November, 1am`. A date can be
+followed by a time such as `30/7 1am` or `2/6, 1:23 PM`; it resolves to the
+next future occurrence in the local timezone. Reminder times in the TUI use
+12-hour format with an `AM` or `PM` suffix. Existing 24-hour clock inputs such
+as `20:00` remain supported, including with a day/month date. Calendar dates
+do not accept a year. If no title follows the time, the title is `Reminder`.
 
 A bare hour such as `8` is interpreted using the current local time. For
 example, before 8:00 AM it means 8:00 AM today. After 8:00 AM, RemindMe asks
@@ -125,9 +128,9 @@ have passed, it asks whether you meant 8:00 AM or 8:00 PM tomorrow. If an
 explicitly specified today time has already passed (for example, `today 8pm`
 after 8:00 PM), RemindMe asks whether to keep it today or move it to tomorrow.
 
-Reminder names can be quoted to preserve spaces. For example,
-`remindme 8pm "Call Mom"` creates a reminder titled `Call Mom`; quoted titles
-also work with day/month dates, as in `remindme 30/07 1am "LinkedIn post"`.
+Put reminder titles in quotes to preserve spaces, for example,
+`remindme 8pm "Review the paper"` or
+`remindme 30/07 1am "Submit the grant application"`.
 
 TUI keys:
 
@@ -190,14 +193,16 @@ Other useful settings in `remindme.py`:
 - `SNOOZE_MINUTES`: the TUI snooze duration.
 - `NOTIFICATION_TIMEOUT_MS`: requested desktop-alert duration. The desktop
   notification daemon may override it.
-- Use `/theme` to browse 24 themes, including Copilot, GitHub, Catppuccin,
+- Use `/theme` to browse 24 themes, including Slate Blue, GitHub, Catppuccin,
   Dracula, Nord, Gruvbox, Tokyo Night, Solarized, and more. The original plain
   terminal appearance is preserved by the `default` theme.
   Your choice is saved in
   `$XDG_CONFIG_HOME/remindme/config.json` (or `~/.config/remindme/config.json`).
   To add or recolor themes, edit the hex color tuples in `THEMES` in
   `remindme.py`.
-  Available themes: `default`, `copilot`, `github-dark`, `github-light`,
+
+
+- Available themes: `default`, `slate-blue`, `github-dark`, `github-light`,
   `catppuccin-mocha`, `catppuccin-latte`, `dracula`, `nord`, `gruvbox-dark`,
   `gruvbox-light`, `tokyo-night`, `one-dark`, `monokai`, `solarized-dark`,
   `solarized-light`, `rose-pine`, `kanagawa`, `everforest`, `matrix`,
@@ -278,20 +283,3 @@ python3 -m unittest -v
 ```
 
 The tests use temporary databases and do not send real desktop notifications.
-
-## Troubleshooting
-
-- **`remindme: command not found`:** confirm `~/.local/bin` is on `PATH` and
-  the link targets `~/scripts/RemindMe/remindme`.
-- **No notification while the laptop was off/asleep:** alerts cannot run while
-  the machine is unavailable. After login, check `systemctl --user status
-  remindme.service`; pending due reminders are checked at service startup.
-- **Service cannot start:** inspect `journalctl --user -u remindme.service`.
-  The unit expects this repository at `~/scripts/RemindMe`.
-- **No desktop alert:** check that `notify-send` is available and that the
-  graphical session has a notification daemon. Failed notifications remain
-  retryable and are logged by the service.
-- **Alert vanishes before 30 seconds:** the application requests 30 seconds,
-  but the desktop notification daemon may enforce a shorter duration.
-
-If you wanna add something to it, go ahead.

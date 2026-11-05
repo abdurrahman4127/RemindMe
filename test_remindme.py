@@ -54,6 +54,10 @@ class ParseDueTests(unittest.TestCase):
             parse_due("in 1d 3h", self.now),
             self.now + timedelta(hours=27),
         )
+        self.assertEqual(
+            parse_due("1d3h", self.now),
+            self.now + timedelta(hours=27),
+        )
 
     def test_rejects_repeated_duration_unit(self):
         with self.assertRaisesRegex(ValueError, "each duration unit only once"):
@@ -165,6 +169,84 @@ class ParseDueTests(unittest.TestCase):
             parse_due("25/11, 1am", self.now),
             datetime(2026, 11, 25, 1, 0, tzinfo=timezone.utc),
         )
+
+    def test_parses_day_month_name_and_cli_title(self):
+        month_names = (
+            ("jan", 1),
+            ("january", 1),
+            ("feb", 2),
+            ("february", 2),
+            ("mar", 3),
+            ("march", 3),
+            ("apr", 4),
+            ("april", 4),
+            ("may", 5),
+            ("jun", 6),
+            ("june", 6),
+            ("jul", 7),
+            ("july", 7),
+            ("aug", 8),
+            ("august", 8),
+            ("sep", 9),
+            ("sept", 9),
+            ("september", 9),
+            ("oct", 10),
+            ("october", 10),
+            ("nov", 11),
+            ("november", 11),
+            ("dec", 12),
+            ("december", 12),
+        )
+        for month_name, month in month_names:
+            day = 15
+            year = 2026 if month >= 11 else 2027
+            date_text = f"{day} {month_name}"
+            with self.subTest(month_name=month_name):
+                title, due_at = parse_reminder_request(
+                    [date_text + ",", "1am", "linkedin", "post"],
+                    self.now,
+                )
+                self.assertEqual(title, "linkedin post")
+                self.assertEqual(
+                    due_at,
+                    datetime(year, month, day, 1, 0, tzinfo=timezone.utc),
+                )
+
+        title, due_at = parse_reminder_request(
+            ["25", "nov,", "1am", "linkedin", "post"],
+            self.now,
+        )
+        self.assertEqual(title, "linkedin post")
+        self.assertEqual(
+            due_at,
+            datetime(2026, 11, 25, 1, 0, tzinfo=timezone.utc),
+        )
+
+    def test_december_date_does_not_match_day_duration_prefix(self):
+        title, due_at = parse_reminder_request(
+            ["16", "dec,", "11am", "linkedin", "post"],
+            self.now,
+        )
+
+        self.assertEqual(title, "linkedin post")
+        self.assertEqual(due_at, datetime(2026, 12, 16, 11, 0, tzinfo=timezone.utc))
+
+    def test_named_month_date_supports_on_at_and_case_variants(self):
+        title, due_at = parse_reminder_request(
+            ["on", "16", "DeCeMbEr", "at", "11:00", "AM", "linkedin", "post"],
+            self.now,
+        )
+
+        self.assertEqual(title, "linkedin post")
+        self.assertEqual(due_at, datetime(2026, 12, 16, 11, 0, tzinfo=timezone.utc))
+
+    def test_named_month_date_skips_invalid_calendar_occurrences(self):
+        self.assertEqual(
+            parse_due("29 feb, 8am", self.now),
+            datetime(2028, 2, 29, 8, 0, tzinfo=timezone.utc),
+        )
+        with self.assertRaisesRegex(ValueError, "valid upcoming date"):
+            parse_due("31 apr, 8am", self.now)
 
     def test_parses_absolute_time_with_optional_title(self):
         title, due_at = parse_reminder_request(
@@ -344,7 +426,7 @@ class CommandPaletteTests(unittest.TestCase):
     def test_large_theme_collection_is_available(self):
         self.assertGreaterEqual(len(THEMES), 20)
         self.assertIsNone(THEMES["default"])
-        self.assertIn("copilot", THEMES)
+        self.assertIn("slate-blue", THEMES)
         self.assertIn("github-dark", THEMES)
 
     def test_palette_is_bottom_docked_and_runs_typed_command(self):

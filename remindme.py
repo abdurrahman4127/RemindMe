@@ -19,13 +19,34 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
+MONTH_PATTERN = (
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|"
+    r"jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?|tember)?|"
+    r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+)
+DAY_MONTH_PATTERN = rf"(?:\d{{1,2}}/\d{{1,2}}|\d{{1,2}}\s+{MONTH_PATTERN})"
+MONTH_NUMBERS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+
 POLL_SECONDS = 10
 SNOOZE_MINUTES = 10
 NOTIFICATION_TIMEOUT_MS = 30_000
 DEFAULT_THEME = "default"
 THEMES = {
     "default": None,
-    "copilot": ("#8b949e", "#2f81f7", "#ffffff", "#1f6feb", "#d29922", "#3fb950"),
+    "slate-blue": ("#8b949e", "#2f81f7", "#ffffff", "#1f6feb", "#d29922", "#3fb950"),
     "github-dark": ("#c9d1d9", "#58a6ff", "#ffffff", "#1f6feb", "#d29922", "#8b949e"),
     "github-light": ("#24292f", "#0969da", "#ffffff", "#0969da", "#9a6700", "#57606a"),
     "catppuccin-mocha": ("#cba6f7", "#89b4fa", "#1e1e2e", "#cba6f7", "#f9e2af", "#a6adc8"),
@@ -399,7 +420,10 @@ def parse_due(value: str, now: datetime | None = None) -> datetime:
     """Parse a local date/time or a relative duration such as 'in 1d 3h'."""
     now = now or datetime.now().astimezone()
     value = value.strip().lower()
-    relative = re.fullmatch(r"(?:in\s+)?((?:\d+\s*[dhm]\s*)+)", value)
+    relative = re.fullmatch(
+        r"(?:in\s+)?((?:\d+\s*[dhm](?=\s|$|\d)\s*)+)",
+        value,
+    )
     if relative:
         parts = re.findall(r"(\d+)\s*([dhm])", relative.group(1))
         units = [unit for _, unit in parts]
@@ -419,7 +443,7 @@ def parse_due(value: str, now: datetime | None = None) -> datetime:
         return now + duration
 
     absolute = re.fullmatch(
-        r"(?:on\s+)?(\d{1,2}/\d{1,2}),?\s+"
+        rf"(?:on\s+)?({DAY_MONTH_PATTERN}),?\s+"
         r"(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2})",
         value,
     )
@@ -440,7 +464,12 @@ def parse_due(value: str, now: datetime | None = None) -> datetime:
         elif hour > 23:
             raise ValueError("24-hour clock hours must be between 0 and 23.")
 
-        day, month = (int(part) for part in day_month.split("/", maxsplit=1))
+        if "/" in day_month:
+            day, month = (int(part) for part in day_month.split("/", maxsplit=1))
+        else:
+            day_text, month_text = day_month.split()
+            day = int(day_text)
+            month = MONTH_NUMBERS[month_text[:3]]
         if not 1 <= month <= 12:
             raise ValueError("Month must be between 1 and 12 in day/month dates.")
         if not 1 <= day <= 31:
@@ -571,7 +600,7 @@ def parse_reminder_request(
             return clarify(error)
 
     relative = re.match(
-        r"^(?:in\s+)?((?:\d+\s*[dhm]\s*)+)",
+        r"^(?:in\s+)?((?:\d+\s*[dhm](?=\s|$|\d)\s*)+)",
         request,
         re.IGNORECASE,
     )
@@ -583,7 +612,7 @@ def parse_reminder_request(
         return title, parse_with_clarification(due_text)
 
     absolute = re.match(
-        r"^(?:(?:on\s+)?\d{1,2}/\d{1,2},?\s+"
+        rf"^(?:(?:on\s+)?{DAY_MONTH_PATTERN},?\s+"
         r"(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2}))(?:\s+|$)",
         request,
         re.IGNORECASE,
