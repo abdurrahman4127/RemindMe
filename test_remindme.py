@@ -10,6 +10,8 @@ from remindme import (
     Reminder,
     ReminderStore,
     QuitRequested,
+    TimeChoice,
+    TimeClarification,
     THEMES,
     command_palette,
     color_attr,
@@ -24,6 +26,7 @@ from remindme import (
     notify_due,
     parse_due,
     parse_reminder_request,
+    prompt_due,
     run_tui,
     save_theme,
     send_desktop_notification,
@@ -62,9 +65,78 @@ class ParseDueTests(unittest.TestCase):
             datetime(2026, 11, 2, 9, 15, tzinfo=timezone.utc),
         )
         self.assertEqual(
-            parse_due("today 1:23 PM", self.now),
-            datetime(2026, 11, 1, 13, 23, tzinfo=timezone.utc),
+            parse_due("today 3:23 PM", self.now),
+            datetime(2026, 11, 1, 15, 23, tzinfo=timezone.utc),
         )
+
+    def test_parses_hour_only_am_pm_today_with_optional_spacing(self):
+        expected = datetime(2026, 11, 1, 20, 0, tzinfo=timezone.utc)
+        for value in ("8pm", "8 pm", "today 8pm", "today 8 pm"):
+            with self.subTest(value=value):
+                self.assertEqual(parse_due(value, self.now), expected)
+
+    def test_parses_am_pm_times_with_minutes_and_defaults_to_zero(self):
+        self.assertEqual(
+            parse_due("8:07pm", self.now),
+            datetime(2026, 11, 1, 20, 7, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            parse_due("tomorrow 12am", self.now),
+            datetime(2026, 11, 2, 0, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            parse_due("tomorrow 12pm", self.now),
+            datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc),
+        )
+
+    def test_parses_bare_hour_before_am_candidate(self):
+        early = datetime(2026, 11, 1, 6, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            parse_due("8", early),
+            datetime(2026, 11, 1, 8, 0, tzinfo=timezone.utc),
+        )
+
+    def test_bare_hour_after_am_candidate_confirms_pm(self):
+        after_morning = datetime(2026, 11, 1, 9, 0, tzinfo=timezone.utc)
+
+        with self.assertRaises(TimeClarification) as caught:
+            parse_due("8", after_morning)
+
+        self.assertEqual(caught.exception.choices[0].label, "Use 08:00 PM today")
+
+    def test_bare_hour_after_both_candidates_asks_which_time_tomorrow(self):
+        evening = datetime(2026, 11, 1, 21, 0, tzinfo=timezone.utc)
+
+        with self.assertRaises(TimeClarification) as caught:
+            parse_due("8", evening)
+
+        self.assertEqual(
+            [choice.due_at for choice in caught.exception.choices],
+            [
+                datetime(2026, 11, 2, 8, 0, tzinfo=timezone.utc),
+                datetime(2026, 11, 2, 20, 0, tzinfo=timezone.utc),
+            ],
+        )
+
+    def test_past_explicit_today_time_asks_today_or_tomorrow(self):
+        late = datetime(2026, 11, 1, 21, 0, tzinfo=timezone.utc)
+
+        with self.assertRaises(TimeClarification) as caught:
+            parse_due("8pm", late)
+
+        self.assertEqual(
+            [choice.due_at for choice in caught.exception.choices],
+            [
+                datetime(2026, 11, 1, 20, 0, tzinfo=timezone.utc),
+                datetime(2026, 11, 2, 20, 0, tzinfo=timezone.utc),
+            ],
+        )
+
+    def test_rejects_invalid_clock_time_values(self):
+        for value in ("13pm", "8:60pm", "24:00", "0"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                parse_due(value, self.now)
 
     def test_parses_tomorrow_local_time(self):
         self.assertEqual(
@@ -76,19 +148,91 @@ class ParseDueTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_due("sometime later", self.now)
 
-    def test_parses_month_day_and_12_hour_time(self):
+    def test_parses_day_month_and_12_hour_time(self):
         self.assertEqual(
-            parse_due("2 Jun, 1:23 PM", self.now),
+            parse_due("2/6, 1:23 PM", self.now),
             datetime(2027, 6, 2, 13, 23, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            parse_due("30/07 1am", self.now),
+            datetime(2027, 7, 30, 1, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            parse_due("30/7 1am", self.now),
+            datetime(2027, 7, 30, 1, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            parse_due("25/11, 1am", self.now),
+            datetime(2026, 11, 25, 1, 0, tzinfo=timezone.utc),
         )
 
     def test_parses_absolute_time_with_optional_title(self):
         title, due_at = parse_reminder_request(
-            ["on", "2", "Jun", "at", "1:23", "PM", "Call", "Sam"],
+            ["on", "2/6", "at", "1:23", "PM", "Call", "Sam"],
             self.now,
         )
         self.assertEqual(title, "Call Sam")
         self.assertEqual(due_at, datetime(2027, 6, 2, 13, 23, tzinfo=timezone.utc))
+
+    def test_parses_day_month_with_hour_only_time_and_quoted_title(self):
+        title, due_at = parse_reminder_request(
+            ["25/11", "1am", "linkedin post"],
+            self.now,
+        )
+
+        self.assertEqual(title, "linkedin post")
+        self.assertEqual(
+            due_at,
+            datetime(2026, 11, 25, 1, 0, tzinfo=timezone.utc),
+        )
+
+    def test_rejects_year_based_date_input(self):
+        with self.assertRaises(ValueError):
+            parse_due("2026-11-25 01:00", self.now)
+
+    def test_parses_compact_clock_time_followed_by_title(self):
+        for time_phrase in ("8pm", "8 pm", "today 8pm"):
+            with self.subTest(time_phrase=time_phrase):
+                title, due_at = parse_reminder_request(
+                    [*time_phrase.split(), "Call", "Mom"],
+                    self.now,
+                )
+                self.assertEqual(title, "Call Mom")
+                self.assertEqual(
+                    due_at,
+                    datetime(2026, 11, 1, 20, 0, tzinfo=timezone.utc),
+                )
+
+    def test_reminder_request_can_resolve_a_time_clarification(self):
+        evening = datetime(2026, 11, 1, 20, 0, tzinfo=timezone.utc)
+
+        def clarify(error):
+            self.assertIn("has passed", error.question)
+            return error.choices[0].due_at
+
+        title, due_at = parse_reminder_request(
+            ["8", "Call", "Mom"],
+            datetime(2026, 11, 1, 9, 0, tzinfo=timezone.utc),
+            clarify,
+        )
+
+        self.assertEqual(title, "Call Mom")
+        self.assertEqual(due_at, evening)
+
+    def test_interactive_due_prompt_applies_selected_clarification(self):
+        evening = datetime(2026, 11, 1, 20, 0, tzinfo=timezone.utc)
+        clarification = TimeClarification(
+            "The morning time has passed.",
+            (TimeChoice("Use 08:00 PM today", evening),),
+        )
+        with (
+            patch("remindme.parse_due", side_effect=clarification),
+            patch("remindme.prompt", return_value="1"),
+        ):
+            due_at, error = prompt_due(object(), "8")
+
+        self.assertEqual(due_at, evening)
+        self.assertIsNone(error)
 
     def test_parses_relative_time_and_defaults_title(self):
         title, due_at = parse_reminder_request(["in", "2h"], self.now)
