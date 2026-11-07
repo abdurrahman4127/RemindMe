@@ -76,10 +76,9 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Publish GitHub release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --verify-tag \
-            --generate-notes \
-            --title "RemindMe $GITHUB_REF_NAME"
+        uses: softprops/action-gh-release@v3
+        with:
+          name: RemindMe ${{ github.ref_name }}
+          generate_release_notes: true
+          files: dist/*
+          fail_on_unmatched_files: true
