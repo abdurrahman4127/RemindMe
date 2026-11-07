@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""A small Linux terminal reminder app with optional desktop notifications."""
+"""A small cross-platform terminal reminder app with desktop notifications."""
 
 from __future__ import annotations
 
 import argparse
 import curses
-import fcntl
 import json
 import os
 import re
@@ -18,6 +17,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 MONTH_PATTERN = (
     r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|"
@@ -141,12 +145,28 @@ PALETTE_OPTIONS = (
 
 
 def default_database_path() -> Path:
-    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    if os.name == "nt":
+        data_home = os.environ.get("LOCALAPPDATA")
+        if not data_home:
+            data_home = str(Path.home() / "AppData" / "Local")
+        return Path(data_home) / "RemindMe" / "reminders.sqlite3"
+    data_home = os.environ.get("XDG_DATA_HOME")
+    if not data_home:
+        data_home = str(Path.home() / ".local" / "share")
+    data_home = Path(data_home)
     return data_home / "remindme" / "reminders.sqlite3"
 
 
 def default_config_path() -> Path:
-    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    if os.name == "nt":
+        config_home = os.environ.get("APPDATA")
+        if not config_home:
+            config_home = str(Path.home() / "AppData" / "Roaming")
+        return Path(config_home) / "RemindMe" / "config.json"
+    config_home = os.environ.get("XDG_CONFIG_HOME")
+    if not config_home:
+        config_home = str(Path.home() / ".config")
+    config_home = Path(config_home)
     return config_home / "remindme" / "config.json"
 
 
@@ -694,6 +714,16 @@ def notify_due(
 
 
 def send_desktop_notification(reminder: Reminder) -> None:
+    if os.name == "nt":
+        from winotify import Notification
+
+        Notification(
+            app_id="RemindMe",
+            title="Reminder",
+            msg=reminder.title,
+        ).show()
+        return
+
     notify_send = shutil.which("notify-send")
     if notify_send is None:
         raise FileNotFoundError("notify-send is not installed")
@@ -715,8 +745,21 @@ def run_daemon(store: ReminderStore) -> None:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a") as lock_file:
         try:
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
+            if os.name == "nt":
+                lock_file.seek(0, os.SEEK_END)
+                if lock_file.tell() == 0:
+                    lock_file.write("\0")
+                    lock_file.flush()
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            if (
+                not isinstance(error, BlockingIOError)
+                and getattr(error, "winerror", None) != 33
+            ):
+                raise
             raise RuntimeError("Another RemindMe notification service is running.") from error
 
         print(f"RemindMe notification service running; database: {store.path}", flush=True)
@@ -1308,7 +1351,9 @@ def run_tui(stdscr: curses.window, store: ReminderStore) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="A local-first Linux terminal reminder app.")
+    parser = argparse.ArgumentParser(
+        description="A local-first terminal reminder app for Linux and Windows."
+    )
     parser.add_argument(
         "--database",
         type=Path,

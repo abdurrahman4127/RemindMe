@@ -1,3 +1,7 @@
 __pycache__/
 *.py[cod]
 *.sqlite3*
+dist/
+pkg/
+src/
+*.pkg.tar.*

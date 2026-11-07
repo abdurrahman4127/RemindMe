@@ -1,4 +1,6 @@
 import curses
+import os
+import subprocess
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -15,6 +17,8 @@ from remindme import (
     THEMES,
     command_palette,
     color_attr,
+    default_config_path,
+    default_database_path,
     edit_buffer,
     draw,
     draw_key_hints,
@@ -355,6 +359,48 @@ class ParseDueTests(unittest.TestCase):
             store = ReminderStore(database)
             self.addCleanup(store.close)
             self.assertEqual(store.list_reminders()[0].title, "Call Sam")
+
+    def test_bang_command_entrypoints_create_reminders(self):
+        if os.name == "nt":
+            self.skipTest("Unix shell launchers are not used on Windows")
+        for command in ("!remindme", "!remind"):
+            with (
+                self.subTest(command=command),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                database = Path(directory) / "reminders.db"
+                result = subprocess.run(
+                    [
+                        str(Path(__file__).parent / command),
+                        "--database",
+                        str(database),
+                        "in",
+                        "2h",
+                        "Call",
+                        "Sam",
+                    ],
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                )
+
+                self.assertIn("Added: Call Sam", result.stdout)
+                store = ReminderStore(database)
+                self.addCleanup(store.close)
+                self.assertEqual(store.list_reminders()[0].title, "Call Sam")
+
+    @unittest.skipUnless(os.name == "nt", "Windows user-data paths")
+    def test_windows_data_and_config_use_appdata(self):
+        self.assertEqual(default_database_path().parent.name, "RemindMe")
+        self.assertEqual(
+            default_database_path().parent.parent,
+            Path(os.environ["LOCALAPPDATA"]),
+        )
+        self.assertEqual(default_config_path().parent.name, "RemindMe")
+        self.assertEqual(
+            default_config_path().parent.parent,
+            Path(os.environ["APPDATA"]),
+        )
 
     def test_no_arguments_open_the_tui(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -763,6 +809,20 @@ class NotificationTests(unittest.TestCase):
             ],
         )
         self.assertEqual(NOTIFICATION_TIMEOUT_MS, 30_000)
+
+    @unittest.skipUnless(os.name == "nt", "Windows toast notifications")
+    @patch("winotify.Notification")
+    def test_windows_desktop_notification_uses_toast(self, notification):
+        reminder = Reminder(1, "Test reminder", self.now, False, False)
+
+        send_desktop_notification(reminder)
+
+        notification.assert_called_once_with(
+            app_id="RemindMe",
+            title="Reminder",
+            msg="Test reminder",
+        )
+        notification.return_value.show.assert_called_once_with()
 
 
 if __name__ == "__main__":

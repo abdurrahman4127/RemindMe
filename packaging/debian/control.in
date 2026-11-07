@@ -1,0 +1,11 @@
+Package: remindme
+Version: @VERSION@
+Maintainer: abdurrahman4127 <whoamiiammr.nobody@gmail.com>
+Section: utils
+Priority: optional
+Architecture: all
+Homepage: https://github.com/abdurrahman4127/RemindMe
+Depends: python3 (>= 3.10), python3-curses
+Description: Local-first Linux terminal reminder app
+ RemindMe provides a terminal UI, SQLite storage, and optional desktop
+ notifications.
