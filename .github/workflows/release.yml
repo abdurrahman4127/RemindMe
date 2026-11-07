@@ -43,7 +43,7 @@ jobs:
       - name: Install Windows build dependencies
         run: python -m pip install -r requirements-build-windows.txt
       - name: Test Windows source
-        run: python -m unittest -q test_remindme
+        run: python -m tools.run_ci_tests
       - name: Build Windows executable
         run: >-
           python -m PyInstaller --clean --noconfirm --onefile --console
