@@ -54,6 +54,9 @@ jobs:
         run: |
           Copy-Item "dist\remindme.exe" "dist\!remindme.exe"
           Copy-Item "dist\remindme.exe" "dist\!remind.exe"
+      - name: Bundle Windows command aliases
+        run: |
+          Compress-Archive -Path "dist\remindme.exe","dist\!remindme.exe","dist\!remind.exe" -DestinationPath "dist\remindme-windows.zip"
       - name: Smoke-test Windows executable
         run: |
           & ".\dist\remindme.exe" --help
@@ -63,7 +66,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-executable
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/*.zip
           if-no-files-found: error
 
   release:
@@ -80,5 +85,8 @@ jobs:
         with:
           name: RemindMe ${{ github.ref_name }}
           generate_release_notes: true
-          files: dist/*
+          files: |
+            dist/*.deb
+            dist/remindme.exe
+            dist/remindme-windows.zip
           fail_on_unmatched_files: true
