@@ -140,7 +140,7 @@ PALETTE_OPTIONS = (
     PaletteOption("delete", "Delete the selected reminder"),
     PaletteOption("theme", "Choose a color theme"),
     PaletteOption("help", "Show key and command help"),
-    PaletteOption("quit", "Exit RemindMe"),
+    PaletteOption("quit", "Exit !RemindMe"),
 )
 
 
@@ -176,16 +176,16 @@ def load_theme(path: Path | None = None) -> str:
         return DEFAULT_THEME
     config = json.loads(config_path.read_text(encoding="utf-8"))
     if not isinstance(config, dict):
-        raise ValueError(f"Invalid RemindMe config in {config_path}: expected a JSON object")
+        raise ValueError(f"Invalid !RemindMe config in {config_path}: expected a JSON object")
     theme = config.get("theme", DEFAULT_THEME)
     if not isinstance(theme, str) or theme not in THEMES:
-        raise ValueError(f"Unknown RemindMe theme in {config_path}: {theme}")
+        raise ValueError(f"Unknown !RemindMe theme in {config_path}: {theme}")
     return theme
 
 
 def save_theme(theme: str, path: Path | None = None) -> None:
     if theme not in THEMES:
-        raise ValueError(f"Unknown RemindMe theme: {theme}")
+        raise ValueError(f"Unknown !RemindMe theme: {theme}")
     config_path = path or default_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
@@ -718,7 +718,7 @@ def send_desktop_notification(reminder: Reminder) -> None:
         from winotify import Notification
 
         Notification(
-            app_id="RemindMe",
+            app_id="!RemindMe",
             title="Reminder",
             msg=reminder.title,
         ).show()
@@ -731,7 +731,7 @@ def send_desktop_notification(reminder: Reminder) -> None:
         [
             notify_send,
             f"--expire-time={NOTIFICATION_TIMEOUT_MS}",
-            "--app-name=RemindMe",
+            "--app-name=!RemindMe",
             "Reminder",
             reminder.title,
         ],
@@ -760,9 +760,9 @@ def run_daemon(store: ReminderStore) -> None:
                 and getattr(error, "winerror", None) != 33
             ):
                 raise
-            raise RuntimeError("Another RemindMe notification service is running.") from error
+            raise RuntimeError("Another !RemindMe notification service is running.") from error
 
-        print(f"RemindMe notification service running; database: {store.path}", flush=True)
+        print(f"!RemindMe notification service running; database: {store.path}", flush=True)
         while True:
             failures = notify_due(store, send_desktop_notification)
             for reminder, error in failures:
@@ -878,7 +878,7 @@ def command_palette(
     stdscr: curses.window,
     theme: str,
     options: tuple[PaletteOption, ...] = PALETTE_OPTIONS,
-    title: str = "RemindMe Commands",
+    title: str = "!RemindMe Commands",
     on_selection: Callable[[str | None], None] | None = None,
 ) -> str | None:
     height, width = stdscr.getmaxyx()

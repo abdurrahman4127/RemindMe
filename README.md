@@ -1,17 +1,17 @@
-# RemindMe
+# !RemindMe
 
 This is a simple pet project of mine to help me remember things and manage
 reminders from the terminal. I'm putting it on GitHub so I don't forget about
 it or lose it when I mess up my system.
 
-RemindMe is a local-first terminal reminder app for Linux and Windows, with
+!RemindMe is a local-first terminal reminder app for Linux and Windows, with
 SQLite storage and optional desktop notifications.
 
 ## Preview
 
 Screenshot of the running terminal UI:
 
-![RemindMe reminder list](assets/figs/reminders.png)
+![!RemindMe reminder list](assets/figs/reminders.png)
 
 ### ASCII banner
 
@@ -42,7 +42,7 @@ you can change the art without editing the Python code:
 | `packaging/` | Debian package builder and packaged systemd user unit. |
 | `test_remindme.py` | Automated tests for date parsing and notification behavior. |
 | `assets/banner.txt` | Editable UTF-8 ASCII/Unicode art displayed in the TUI header. |
-| `assets/figs/reminders.png` | Screenshot example of the RemindMe terminal UI. |
+| `assets/figs/reminders.png` | Screenshot example of the !RemindMe terminal UI. |
 | `.gitignore` | Keeps Python bytecode and local database artifacts out of Git. |
 
 ## Requirements
@@ -186,11 +186,11 @@ as `20:00` remain supported, including with a day/month date. Calendar dates
 do not accept a year. If no title follows the time, the title is `Reminder`.
 
 A bare hour such as `8` is interpreted using the current local time. For
-example, before 8:00 AM it means 8:00 AM today. After 8:00 AM, RemindMe asks
+example, before 8:00 AM it means 8:00 AM today. After 8:00 AM, !RemindMe asks
 you to confirm 8:00 PM today or enter a different time. If both occurrences
 have passed, it asks whether you meant 8:00 AM or 8:00 PM tomorrow. If an
 explicitly specified today time has already passed (for example, `today 8pm`
-after 8:00 PM), RemindMe asks whether to keep it today or move it to tomorrow.
+after 8:00 PM), !RemindMe asks whether to keep it today or move it to tomorrow.
 
 Put reminder titles in quotes to preserve spaces, for example,
 `!remindme 8pm "Review the paper"` or

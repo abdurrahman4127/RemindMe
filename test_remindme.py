@@ -460,7 +460,7 @@ class CommandPaletteTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
 
-            with self.assertRaisesRegex(ValueError, "Unknown RemindMe theme"):
+            with self.assertRaisesRegex(ValueError, "Unknown !RemindMe theme"):
                 save_theme("ultraviolet", config_path)
 
     def test_default_theme_preserves_original_plain_style(self):
@@ -801,7 +801,7 @@ class NotificationTests(unittest.TestCase):
             [
                 "/usr/bin/notify-send",
                 f"--expire-time={NOTIFICATION_TIMEOUT_MS}",
-                "--app-name=RemindMe",
+                "--app-name=!RemindMe",
                 "Reminder",
                 "Test reminder",
             ],
@@ -816,7 +816,7 @@ class NotificationTests(unittest.TestCase):
         send_desktop_notification(reminder)
 
         notification.assert_called_once_with(
-            app_id="RemindMe",
+            app_id="!RemindMe",
             title="Reminder",
             msg="Test reminder",
         )

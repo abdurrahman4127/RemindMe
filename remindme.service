@@ -1,5 +1,5 @@
 [Unit]
-Description=RemindMe desktop notification service
+Description=!RemindMe desktop notification service
 After=graphical-session.target
 
 [Service]

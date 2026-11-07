@@ -83,7 +83,7 @@ jobs:
       - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v3
         with:
-          name: RemindMe ${{ github.ref_name }}
+          name: "!RemindMe ${{ github.ref_name }}"
           generate_release_notes: true
           files: |
             dist/*.deb
