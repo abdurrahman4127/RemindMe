@@ -5,7 +5,7 @@ Section: utils
 Priority: optional
 Architecture: all
 Homepage: https://github.com/abdurrahman4127/RemindMe
-Depends: python3 (>= 3.10), python3-curses
+Depends: python3 (>= 3.10)
 Description: Local-first Linux terminal reminder app
  RemindMe provides a terminal UI, SQLite storage, and optional desktop
  notifications.

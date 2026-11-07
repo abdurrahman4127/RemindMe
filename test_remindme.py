@@ -791,6 +791,7 @@ class NotificationTests(unittest.TestCase):
 
     @patch("remindme.subprocess.run")
     @patch("remindme.shutil.which", return_value="/usr/bin/notify-send")
+    @unittest.skipIf(os.name == "nt", "Linux notify-send behavior")
     def test_desktop_notification_requests_30_second_timeout(
         self, _which, run
     ):
