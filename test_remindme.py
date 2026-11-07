@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -356,9 +357,8 @@ class ParseDueTests(unittest.TestCase):
                 )
             self.assertEqual(result, 0)
             tui.assert_not_called()
-            store = ReminderStore(database)
-            self.addCleanup(store.close)
-            self.assertEqual(store.list_reminders()[0].title, "Call Sam")
+            with closing(ReminderStore(database)) as store:
+                self.assertEqual(store.list_reminders()[0].title, "Call Sam")
 
     def test_bang_command_entrypoints_create_reminders(self):
         if os.name == "nt":
@@ -385,9 +385,8 @@ class ParseDueTests(unittest.TestCase):
                 )
 
                 self.assertIn("Added: Call Sam", result.stdout)
-                store = ReminderStore(database)
-                self.addCleanup(store.close)
-                self.assertEqual(store.list_reminders()[0].title, "Call Sam")
+                with closing(ReminderStore(database)) as store:
+                    self.assertEqual(store.list_reminders()[0].title, "Call Sam")
 
     @unittest.skipUnless(os.name == "nt", "Windows user-data paths")
     def test_windows_data_and_config_use_appdata(self):
@@ -715,17 +714,16 @@ class TuiQuitTests(unittest.TestCase):
                 return next(self.keys)
 
         with tempfile.TemporaryDirectory() as directory:
-            store = ReminderStore(Path(directory) / "reminders.db")
-            self.addCleanup(store.close)
-            screen = FakeScreen()
-            with (
-                patch("remindme.load_banner", return_value=()),
-                patch("remindme.load_theme", return_value="default"),
-                patch("remindme.apply_theme"),
-                patch("remindme.curses.curs_set"),
-                patch("remindme.draw"),
-            ):
-                run_tui(screen, store)
+            with closing(ReminderStore(Path(directory) / "reminders.db")) as store:
+                screen = FakeScreen()
+                with (
+                    patch("remindme.load_banner", return_value=()),
+                    patch("remindme.load_theme", return_value="default"),
+                    patch("remindme.apply_theme"),
+                    patch("remindme.curses.curs_set"),
+                    patch("remindme.draw"),
+                ):
+                    run_tui(screen, store)
 
         self.assertEqual(screen.read_count, 4)
 
@@ -742,17 +740,16 @@ class TuiQuitTests(unittest.TestCase):
                 return 17
 
         with tempfile.TemporaryDirectory() as directory:
-            store = ReminderStore(Path(directory) / "reminders.db")
-            self.addCleanup(store.close)
-            screen = FakeScreen()
-            with (
-                patch("remindme.load_banner", return_value=()),
-                patch("remindme.load_theme", return_value="default"),
-                patch("remindme.apply_theme"),
-                patch("remindme.curses.curs_set"),
-                patch("remindme.draw"),
-            ):
-                run_tui(screen, store)
+            with closing(ReminderStore(Path(directory) / "reminders.db")) as store:
+                screen = FakeScreen()
+                with (
+                    patch("remindme.load_banner", return_value=()),
+                    patch("remindme.load_theme", return_value="default"),
+                    patch("remindme.apply_theme"),
+                    patch("remindme.curses.curs_set"),
+                    patch("remindme.draw"),
+                ):
+                    run_tui(screen, store)
 
         self.assertEqual(screen.read_count, 1)
 
