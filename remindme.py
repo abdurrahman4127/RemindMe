@@ -1366,16 +1366,39 @@ def main(argv: list[str] | None = None) -> int:
         help="run the background desktop-notification service",
     )
     parser.add_argument(
+        "-t",
+        "--time",
+        help="reminder due time (for example: 'in 2h' or '25 nov, 1am')",
+    )
+    parser.add_argument(
+        "-n",
+        "--note",
+        help="reminder title or note",
+    )
+    parser.add_argument(
         "reminder",
         nargs="*",
         metavar="TIME/TITLE",
-        help="create a reminder instead of opening the TUI (for example: 1d 3h Call Sam)",
+        help="create a reminder instead of opening the TUI using the existing positional syntax",
     )
-    args = parser.parse_args(argv)
+    args = parser.parse_intermixed_args(argv)
+    if args.time is not None or args.note is not None:
+        if args.reminder:
+            parser.error("use either -t/-n flags or positional reminder arguments, not both")
+        if args.time is None:
+            parser.error("-n/--note requires -t/--time")
     store = ReminderStore(args.database)
     try:
         if args.daemon:
             run_daemon(store)
+        elif args.time is not None:
+            title = args.note or "Reminder"
+            due_at = parse_reminder_request(
+                [args.time],
+                clarify=clarify_time_cli,
+            )[1]
+            store.add(title, due_at)
+            print(f"Added: {title} — {due_at.astimezone().strftime('%a %d %b, %I:%M %p')}")
         elif args.reminder:
             title, due_at = parse_reminder_request(
                 args.reminder,

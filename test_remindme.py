@@ -1,9 +1,10 @@
 import curses
+import io
 import os
 import subprocess
 import tempfile
 import unittest
-from contextlib import closing
+from contextlib import closing, redirect_stderr
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -359,6 +360,60 @@ class ParseDueTests(unittest.TestCase):
             tui.assert_not_called()
             with closing(ReminderStore(database)) as store:
                 self.assertEqual(store.list_reminders()[0].title, "Call Sam")
+
+    def test_cli_time_and_note_flags_create_reminder_in_either_order(self):
+        for flag_order in (
+            ["-t", "in 2h", "-n", "Call Sam"],
+            ["-n", "Call Sam", "-t", "in 2h"],
+        ):
+            with self.subTest(flag_order=flag_order), tempfile.TemporaryDirectory() as directory:
+                database = Path(directory) / "reminders.db"
+                with patch("remindme.curses.wrapper") as tui:
+                    result = main(["--database", str(database), *flag_order])
+                self.assertEqual(result, 0)
+                tui.assert_not_called()
+                with closing(ReminderStore(database)) as store:
+                    self.assertEqual(store.list_reminders()[0].title, "Call Sam")
+
+    def test_cli_time_flag_defaults_note_to_reminder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "reminders.db"
+            with patch("remindme.curses.wrapper") as tui:
+                result = main(["--database", str(database), "--time", "in 2h"])
+            self.assertEqual(result, 0)
+            tui.assert_not_called()
+            with closing(ReminderStore(database)) as store:
+                self.assertEqual(store.list_reminders()[0].title, "Reminder")
+
+    def test_cli_note_flag_requires_time_flag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "reminders.db"
+            stderr = io.StringIO()
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as error:
+                main(["--database", str(database), "-n", "Call Sam"])
+            self.assertEqual(error.exception.code, 2)
+            self.assertIn("-n/--note requires -t/--time", stderr.getvalue())
+
+    def test_cli_rejects_mixing_flags_with_positional_syntax(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "reminders.db"
+            stderr = io.StringIO()
+            with (
+                redirect_stderr(stderr),
+                self.assertRaises(SystemExit) as error,
+            ):
+                main(
+                    [
+                        "--database",
+                        str(database),
+                        "-t",
+                        "in 2h",
+                        "Call",
+                        "Sam",
+                    ]
+                )
+            self.assertEqual(error.exception.code, 2)
+            self.assertIn("not both", stderr.getvalue())
 
     def test_bang_command_entrypoints_create_reminders(self):
         if os.name == "nt":

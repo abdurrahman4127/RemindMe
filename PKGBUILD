@@ -1,5 +1,5 @@
 pkgname=remindme
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc='Local-first terminal reminder app'
 arch=('any')

@@ -60,12 +60,12 @@ The downloadable Windows executable includes its runtime and dependencies.
 
 ### Debian and Ubuntu
 
-Download `remindme_1.0.0_all.deb` from the
+Download `remindme_1.0.1_all.deb` from the
 [latest GitHub release](https://github.com/abdurrahman4127/RemindMe/releases/latest),
 then install it with apt:
 
 ```sh
-sudo apt install ./remindme_1.0.0_all.deb
+sudo apt install ./remindme_1.0.1_all.deb
 ```
 
 The package installs `remindme`, `remind`, `!remindme`, and `!remind` in
@@ -145,7 +145,7 @@ In Bash or Zsh, escape the leading exclamation mark when invoking the bang
 commands (for example, `\!remindme`).
 
 Run it with a due-time phrase to create a reminder directly without opening
-the TUI:
+the TUI. The existing positional syntax remains supported:
 
 ```sh
 !remindme in 20m "Email the journal editor"
@@ -169,6 +169,19 @@ the TUI:
 !remindme tomorrow 9:00 AM "Finish the peer review"
 !remind today 1:23 PM "Send the revision update"
 ```
+
+You can also use `-t`/`--time` for the due time and `-n`/`--note` for the
+reminder title. Quote multiword values; the flags can appear in either order.
+The title is optional and defaults to `Reminder`:
+
+```sh
+!remindme -t "in 2h" -n "Email the journal editor"
+!remindme -n "Review the paper" -t "tomorrow 9am"
+!remindme --time "25 nov, 1am" --note "Prepare the LinkedIn post"
+!remindme -t "in 20m"
+```
+
+Do not combine the flag form with positional reminder arguments.
 
 Relative time accepts combined days (`d`), hours (`h`), and minutes (`m`), for
 example `1d 3h` means 27 hours from now and `3d 47m` means 3 days and 47
