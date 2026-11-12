@@ -36,6 +36,7 @@ from remindme import (
     run_tui,
     save_theme,
     send_desktop_notification,
+    show_help,
     theme_palette_options,
 )
 
@@ -755,6 +756,66 @@ class InputEditingTests(unittest.TestCase):
 
 
 class TuiQuitTests(unittest.TestCase):
+    def test_help_screen_explains_time_title_cli_and_tui_usage(self):
+        class FakeScreen:
+            def __init__(self):
+                self.writes = []
+                self.read_count = 0
+
+            def getmaxyx(self):
+                return 24, 80
+
+            def erase(self):
+                pass
+
+            def addnstr(self, *args):
+                self.writes.append(args)
+
+            def refresh(self):
+                pass
+
+            def getch(self):
+                self.read_count += 1
+                return ord("x")
+
+        screen = FakeScreen()
+        show_help(screen)
+        rendered = "\n".join(write[2] for write in screen.writes)
+
+        self.assertIn("in 20m, 2h, or 1d 3h", rendered)
+        self.assertIn("25 nov, 1am or 30/7 20:30", rendered)
+        self.assertIn('!remindme -t "in 2h" -n "Call Sam"', rendered)
+        self.assertIn("-t/--time sets due time; -n/--note sets the title.", rendered)
+        self.assertIn("Space done; s snooze; d delete.", rendered)
+        self.assertEqual(screen.read_count, 1)
+
+    def test_help_command_opens_help_screen_and_returns_to_tui(self):
+        class FakeScreen:
+            def __init__(self):
+                self.keys = iter((ord("/"), 17))
+
+            def keypad(self, _enabled):
+                pass
+
+            def getch(self):
+                return next(self.keys)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with closing(ReminderStore(Path(directory) / "reminders.db")) as store:
+                screen = FakeScreen()
+                with (
+                    patch("remindme.load_banner", return_value=()),
+                    patch("remindme.load_theme", return_value="default"),
+                    patch("remindme.apply_theme"),
+                    patch("remindme.curses.curs_set"),
+                    patch("remindme.draw"),
+                    patch("remindme.command_palette", return_value="help"),
+                    patch("remindme.show_help") as help_screen,
+                ):
+                    run_tui(screen, store)
+
+        help_screen.assert_called_once_with(screen)
+
     def test_escape_and_q_do_not_quit_but_ctrl_q_does(self):
         class FakeScreen:
             def __init__(self):

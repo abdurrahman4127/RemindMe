@@ -1138,6 +1138,62 @@ def draw_key_hints(
             column += 2
 
 
+def show_help(stdscr: curses.window) -> None:
+    height, width = stdscr.getmaxyx()
+    lines = (
+        ("Add in TUI", "Press a, enter a title, then enter when it's due."),
+        ("Relative", "in 20m, 2h, or 1d 3h"),
+        ("Clock", "8pm, today 8pm, or tomorrow 09:15"),
+        ("Calendar", "25 nov, 1am or 30/7 20:30 (day/month)"),
+        ("Time tips", "Minutes default to :00; 12am is midnight, 12pm is noon."),
+        ("Title", "Defaults to Reminder. Quote multiword CLI titles."),
+        ("Positional CLI", '!remindme in 20m "Call Sam"'),
+        ("Flag CLI", '!remindme -t "in 2h" -n "Call Sam"'),
+        ("Flags", "-t/--time sets due time; -n/--note sets the title."),
+        ("Move", "Arrows or j/k select; Ctrl+Q quits."),
+        ("Actions", "a add; e edit; Space done; s snooze; d delete."),
+        ("Commands", "/ opens the palette, e.g. /help or /theme."),
+        ("Quit", "Ctrl+Q or /quit. In Bash/Zsh, escape ! as \\!."),
+    )
+    stdscr.erase()
+    if height > 0:
+        stdscr.addnstr(
+            0,
+            1,
+            "!RemindMe quick help",
+            max(0, width - 2),
+            color_attr("accent", curses.A_BOLD),
+        )
+    if height > 1:
+        stdscr.addnstr(
+            1,
+            0,
+            "─" * max(0, width - 1),
+            max(0, width - 1),
+            color_attr("muted"),
+        )
+    for row, (label, text) in enumerate(lines, start=2):
+        if row >= height - 2:
+            break
+        stdscr.addnstr(
+            row,
+            1,
+            f"{label:<15} {text}",
+            max(0, width - 2),
+            color_attr("muted") if label in ("Relative", "Clock", "Calendar") else curses.A_NORMAL,
+        )
+    if height > 1:
+        stdscr.addnstr(
+            height - 1,
+            1,
+            "Press any key to return",
+            max(0, width - 2),
+            color_attr("muted", curses.A_DIM),
+        )
+    stdscr.refresh()
+    stdscr.getch()
+
+
 def draw(
     stdscr: curses.window,
     reminders: list[Reminder],
@@ -1288,7 +1344,7 @@ def run_tui(stdscr: curses.window, store: ReminderStore) -> None:
                     message = f"Theme changed to {theme}."
                 continue
             if command == "help":
-                message = "Commands: /add /edit /done /snooze /delete /theme /quit"
+                show_help(stdscr)
                 continue
             key = {
                 "add": ord("a"),
